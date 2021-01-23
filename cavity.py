@@ -49,26 +49,42 @@ class Cavity:
     def reflectance_function(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
         """ Reflectance as a function of laser frequency w. Used for curve fitting. """
         # From Rev. Mod. Phys.  87, 1379 (2015)
-        # r_up = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up)))
-        # r_down = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down)))
-        
+
+        if spin_state == 0:
+            r_down = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down)))
+            return (r_down * r_down.conjugate()).real
+        elif spin_state == 1:
+            r_up = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up)))
+            return (r_up * r_up.conjugate()).real
+        elif spin_state == -1:
+            r_empty = 1 - (2 * k_in / (1j * (w - w_c) + k_tot))
+            return (r_empty * r_empty.conjugate()).real
+        else:
+            print("spin_state should be -1, 0, or 1.")
+            return
+               
         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
-        r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
-        r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))
+        # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
+        # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))
         
-        R_up = (r_up * r_up.conjugate()).real
-        R_down = (r_down * r_down.conjugate()).real
-        return R_up if spin_state == 1 else R_down
         
     @staticmethod
     def transmittance_function(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
         """ Transmittance as a function of laser frequency w. Used for curve fitting. """
         # From Rev. Mod. Phys.  87, 1379 (2015)
-        t_up = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up))
-        t_down = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down))
-        T_up = (t_up * t_up.conjugate()).real
-        T_down = (t_down * t_down.conjugate()).real
-        return T_up if spin_state == 1 else T_down
+
+        if spin_state == 0:
+            t_down = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down))
+            return (t_down * t_down.conjugate()).real
+        elif spin_state == 1:
+            t_up = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up))
+            return (t_up * t_up.conjugate()).real
+        elif spin_state == -1:
+            t_empty = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot)
+            return (t_empty * t_empty.conjugate()).real
+        else:
+            print("spin_state should be -1, 0, or 1.")
+            return
 
     @staticmethod
     def contrast_function(ref_down, ref_up):
@@ -188,12 +204,17 @@ class CavitySiV(Cavity):
         plt.plot(w_arr, ref_up, label="up")
         plt.plot([max_contrast_pos, max_contrast_pos], [-0.05, 1], 'r--')
         plt.ylim([0, 1])
+        plt.xlabel("Frequency")
+        plt.ylabel("Reflectance")
+        plt.legend()
 
         # Plot reflection contrast 
         plt.subplot(1, 2, 2)
         plt.title("Reflection contrast spectrum")
         plt.plot(w_arr, contrast)
         plt.plot([max_contrast_pos, max_contrast_pos] , [min(contrast), max(contrast)], 'r--')
+        plt.xlabel("Frequency")
+        plt.ylabel("Reflection Contrast")
         
         print("Maximum contrast = {:.3} located at frequency {:.3}".format(max(contrast), max_contrast_pos))
         print("Lower reflectivity = {:.3}, higher reflectivity = {:.3}".format(ref_up[np.argmax(contrast)], ref_down[np.argmax(contrast)]))
