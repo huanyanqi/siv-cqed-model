@@ -1,6 +1,7 @@
 import numpy as np
 from siv import SiV
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 
 class Cavity:
     """ Model of a cavity with an arbitrary qubit placed in the cavity. The cavity
@@ -46,7 +47,7 @@ class Cavity:
         self.cavity_params.update(cavity_params)
 
     @staticmethod
-    def reflectance_function(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
+    def reflectance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
         """ Reflectance as a function of laser frequency w. Used for curve fitting. """
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
@@ -69,7 +70,7 @@ class Cavity:
         
         
     @staticmethod
-    def transmittance_function(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
+    def transmittance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
         """ Transmittance as a function of laser frequency w. Used for curve fitting. """
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
@@ -87,24 +88,24 @@ class Cavity:
             return
 
     @staticmethod
-    def contrast_function(ref_down, ref_up):
+    def spin_contrast_fn(ref_down, ref_up):
         """ Returns the function that defines the contrast between the reflection spectra of down and up spins.  """
         return np.abs(np.log(ref_down / ref_up)) * np.maximum(ref_down, ref_up)
         # (1 - r_down/2)  * r_up # TODO Update this contrast function to infidelity
 
     @staticmethod
-    def contrast_function_empty(ref_empty, ref_up):
+    def empty_contrast_fn(ref_empty, ref_up):
         """ Returns the function that defines the contrast between the reflection 
         spectra with an up spin and with an empty cavity.  """
         return np.abs(np.log(ref_empty / ref_up))
         
     def reflectance(self, w, spin_state):
         """ Reflectance as a function of laser frequency w. """
-        return self.reflectance_function(w, spin_state, **self.cavity_params)
+        return self.reflectance_fn(w, spin_state, **self.cavity_params)
     
     def transmittance(self, w, spin_state):
         """ Transmittance as a function of laser frequency w. """
-        return self.transmittance_function(w, spin_state, **self.cavity_params)
+        return self.transmittance_fn(w, spin_state, **self.cavity_params)
     
     def fit_reflection(self, freqs, spectrum):
         """ Fit the reflection spectrum as a function of the laser frequency sweep (freqs). Returns the fitted parameters. """
@@ -112,12 +113,21 @@ class Cavity:
        # def lorentzian(x, A, x0, width):
        #     return A / ((x - x0) ** 2 + width ** 2
 
-    def contrast_empty(self, w, w_up):
+    def empty_contrast(self, w, w_up):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
     
         self.set_cavity_params({"w_c": 0, "w_up": w_up}) 
-        return self.contrast_function_empty(self.reflectance(w, -1), self.reflectance(w, 1)) 
+        return self.empty_contrast_fn(self.reflectance(w, -1), self.reflectance(w, 1)) 
+
+    def optimize_empty_contrast(self, w_0, w_up_0, w_bounds, w_up_bounds):
+        opt = minimize(lambda args: -self.empty_contrast(*args), x0=[w_0, w_up_0], bounds=(w_bounds, w_up_bounds))
+
+        # Extract optimal params and optimal value
+        w_opt, w_up_opt = opt.x 
+        empty_contrast_opt = -opt.fun # Negative since we used minimize()
+
+        return ((w_opt, w_up_opt), empty_contrast_opt)
 
     def plot_reflection_contrast_empty(self, w_arr, w_up):
 
@@ -126,7 +136,7 @@ class Cavity:
         
         ref_empty = self.reflectance(w_arr, -1)
         ref_up = self.reflectance(w_arr, 1)
-        contrast = self.contrast_function_empty(ref_empty, ref_up)
+        contrast = self.empty_contrast_fn(ref_empty, ref_up)
         max_contrast_pos = w_arr[np.argmax(contrast)]
         
         # PLot reflection spectrum
@@ -207,7 +217,7 @@ class CavitySiV(Cavity):
 
     # TODO: Make a copy of the cavity + SiV so that we don't need to modify
     # the current parameters? 
-    def contrast(self, w, B, delta, B_axis):
+    def spin_contrast(self, w, B, delta, B_axis):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
         
@@ -220,7 +230,17 @@ class CavitySiV(Cavity):
         # Set the detuning and computed splitting
         self.set_cavity_params({"w_c": delta, "w_down": 0, "w_up": splitting}) 
 
-        return self.contrast_function(self.reflectance(w, 0), self.reflectance(w, 1)) 
+        return self.spin_contrast_fn(self.reflectance(w, 0), self.reflectance(w, 1)) 
+
+    def optimize_spin_contrast(self, w_0, B_0, delta_0, w_bounds, B_bounds, delta_bounds, B_axis):
+        opt = minimize(lambda args: -self.spin_contrast(args[0], args[1], args[2], B_axis), 
+                        x0=[w_0, B_0, delta_0], bounds=(w_bounds, B_bounds, delta_bounds))
+
+        # Extract optimal params and optimal value
+        w_opt, B_opt, delta_opt = opt.x
+        spin_contrast_opt = -opt.fun # Negative since we used minimize()
+
+        return ((w_opt, B_opt, delta_opt), spin_contrast_opt)
 
     # TODO: Make a copy of the cavity + SiV so that we don't need to modify
     # the current parameters? 
@@ -235,7 +255,7 @@ class CavitySiV(Cavity):
         
         ref_down = self.reflectance(w_arr, 0)
         ref_up = self.reflectance(w_arr, 1)
-        contrast = self.contrast_function(ref_down, ref_up)
+        contrast = self.spin_contrast_fn(ref_down, ref_up)
         max_contrast_pos = w_arr[np.argmax(contrast)]
         
         # PLot reflection spectrum
