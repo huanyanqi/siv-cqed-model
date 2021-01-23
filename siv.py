@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from qutip import basis, ket2dm, matrix_histogram_complex
 
-class SiVObject():
+class SiV():
     def __init__(self, B=[0,0,0], alpha_g=0, beta_g=0, alpha_e=0, beta_e=0, f=0.1,
                  lambda_g=45, lambda_e=257, ups_gx=11, ups_gy=11, ups_ex=20, ups_ey=20, Delta_eg=4.159e5):
 
@@ -39,24 +39,30 @@ class SiVObject():
         self.Hg = H_sep[0]
         self.He = H_sep[1]
 
-    # this function builds the complete SiV Hamiltonian (both the excited and ground states)
-    # in the orbital eigenstates basis described by Christian Hepp in his thesis (2014)
+    def __repr__(self):
+        return (f"SiV(B={self.B}, alpha_g={self.alpha_g}, beta_g={self.beta_g}, " +
+                f"alpha_e={self.alpha_e}, beta_e={self.beta_e}, f={self.f}, " + 
+                f"lambda_g={self.lambda_g}, lambda_e={self.lambda_e}, " +
+                f"ups_gx={self.ups_gx}, ups_gy={self.ups_gy}, " +
+                f"ups_ex={self.ups_ex}, ups_ey={self.ups_ey}, Delta_eg={self.Delta_eg}")
 
     def build_SiV_Hamiltonian(self):
+        """ This function builds the complete SiV Hamiltonian (both the excited and ground states)
+        in the orbital eigenstates basis described by Christian Hepp in his thesis (2014)"""
 
-        B=self.B
-        alpha_g=self.alpha_g
-        beta_g=self.beta_g
-        alpha_e=self.alpha_e
-        beta_e=self.beta_e
-        f=self.f
-        lambda_g=self.lambda_g
-        lambda_e=self.lambda_e
-        ups_gx=self.ups_gx
-        ups_gy=self.ups_gy
-        ups_ex=self.ups_ex
-        ups_ey=self.ups_ey
-        Delta_eg=self.Delta_eg
+        B = self.B
+        alpha_g = self.alpha_g
+        beta_g = self.beta_g
+        alpha_e = self.alpha_e
+        beta_e = self.beta_e
+        f = self.f
+        lambda_g = self.lambda_g
+        lambda_e = self.lambda_e
+        ups_gx = self.ups_gx
+        ups_gy = self.ups_gy
+        ups_ex = self.ups_ex
+        ups_ey = self.ups_ey
+        Delta_eg = self.Delta_eg
 
         Bx = B[0]
         By = B[1]
@@ -107,11 +113,11 @@ class SiVObject():
 
         return H0 + HSO + HJT + HZS + HZL + HStrain
 
-    # this function builds two SiV Hamiltonians, one for the ground states (Hg)
-    # and one for the excited states (He), separately in the orbital eigenstates
-    # basis described by Christian Hepp in his thesis (2014)
 
     def build_SiV_Hamiltonian_sep(self):
+        """ This function builds two SiV Hamiltonians, one for the ground states (Hg)
+        and one for the excited states (He), separately in the orbital eigenstates
+        basis described by Christian Hepp in his thesis (2014). """
 
         B=self.B
         alpha_g=self.alpha_g
@@ -168,12 +174,12 @@ class SiVObject():
         return [HSO_g + HJT_g + HZS + HZL + HStrain_g, HSO_e + HJT_e + HZS + HZL + HStrain_e]
 
 
-    # this function updates all values in the full, ground, and excited Hamiltonians
-    # you specify. If no arguments are given to the function (e.g. siv.update_val() is called),
-    # nothing changes
-
     def update_val(self, B=[], alpha_g=None, beta_g=None, alpha_e=None, beta_e=None, f=None,
                    lambda_g=None, lambda_e=None, ups_gx=None, ups_gy=None, ups_ex=None, ups_ey=None, Delta_eg=None):
+        """ This function updates all values in the full, ground, and excited Hamiltonians
+        you specify. If no arguments are given to the function (e.g. siv.update_val() is called),
+        nothing changes. """
+        
         if len(B):
             self.B = B
         if alpha_g is not None:
@@ -208,14 +214,14 @@ class SiVObject():
         self.He = H_sep[1]
 
 
-    # This function sweeps through all magnetic field values given by B and
-    # returns the eigenenergies and eigenvectors. B is an array
-    # with shape (3, N_B), where N_B is the number of magnetic fields to be
-    # swept. If plot is True, the eigenenergies will be plotted in function
-    # of the magnitude of B (only makes sense if B is linearly increasing in
-    # one direction)
-
     def sweep_B_field_eigenenergies(self, B, plot=True):
+        """ This function sweeps through all magnetic field values given by B and
+        returns the eigenenergies and eigenvectors. B is an array
+        with shape (3, N_B), where N_B is the number of magnetic fields to be
+        swept. If plot is True, the eigenenergies will be plotted in function
+        of the magnitude of B (only makes sense if B is linearly increasing in
+        one direction) """
+
         bands = np.zeros([2,len(B[0,:]),4])
         states = [[], []]
         B_mag = np.zeros(len(B[0,:]))
@@ -241,17 +247,19 @@ class SiVObject():
 
         return [bands, states]
 
-    # This function sweeps through all magnetic field values given by B and
-    # returns the transition frequencies of transitions between the ground
-    # and excited states. B is an array with shape (3, N_B), where N_B is
-    # the number of magnetic fields to be swept. If plot is True, the transition
-    # frequencies will be plotted in function of the magnitude of B (only
-    # makes sense if B is linearly increasing in one direction). If frozen
-    # is set to False, all transitions between ground and excited states are
-    # possible. If frozen is set to True, only the transitions between the two
-    # lowest excited states and two lowest ground states will be considered
+    
 
     def sweep_B_field_transitions(self, B, frozen=False, plot=True):
+        """ This function sweeps through all magnetic field values given by B and
+        returns the transition frequencies of transitions between the ground
+        and excited states. B is an array with shape (3, N_B), where N_B is
+        the number of magnetic fields to be swept. If plot is True, the transition
+        frequencies will be plotted in function of the magnitude of B (only
+        makes sense if B is linearly increasing in one direction). If frozen
+        is set to False, all transitions between ground and excited states are
+        possible. If frozen is set to True, only the transitions between the two
+        lowest excited states and two lowest ground states will be considered. """
+
         B_mag = np.zeros(len(B[0,:]))
 
         if frozen:
@@ -296,11 +304,10 @@ class SiVObject():
 
         return transitions
 
-    # This function will show a graphical representation of the eigenstates of the
-    # ground states Hamiltonian if mode='ground' or excited states Hamiltonian if
-    # mode='excited'. There are two visualization options: 'circles' and 'dm'.
-
     def show_eigenstates(self, mode='ground', visualization='circles'):
+        """ This function will show a graphical representation of the eigenstates of the
+        ground states Hamiltonian if mode='ground' or excited states Hamiltonian if
+        mode='excited'. There are two visualization options: 'circles' and 'dm'. """
 
         if mode == 'ground':
             states = self.Hg.eigenstates()
@@ -309,15 +316,15 @@ class SiVObject():
             states = self.He.eigenstates()
 
 
-        glabels = ['$\left | e_{gx} \\uparrow \\right \\rangle$', \
-                  '$\left | e_{gx} \\downarrow \\right \\rangle$', \
-                  '$\left | e_{gy} \\uparrow \\right \\rangle$', \
-                  '$\left | e_{gy} \\downarrow \\right \\rangle$', \
+        glabels = ['$\left | e_{gx} \\uparrow \\right \\rangle$', 
+                  '$\left | e_{gx} \\downarrow \\right \\rangle$', 
+                  '$\left | e_{gy} \\uparrow \\right \\rangle$', 
+                  '$\left | e_{gy} \\downarrow \\right \\rangle$'
                   ]
-        elabels = ['$\left | e_{ux} \\uparrow \\right \\rangle$', \
-                  '$\left | e_{ux} \\downarrow \\right \\rangle$', \
-                  '$\left | e_{uy} \\uparrow \\right \\rangle$', \
-                  '$\left | e_{uy} \\downarrow \\right \\rangle$', \
+        elabels = ['$\left | e_{ux} \\uparrow \\right \\rangle$', 
+                  '$\left | e_{ux} \\downarrow \\right \\rangle$', 
+                  '$\left | e_{uy} \\uparrow \\right \\rangle$', 
+                  '$\left | e_{uy} \\downarrow \\right \\rangle$'
                   ]
 
         if visualization == 'circles':
@@ -403,16 +410,15 @@ class SiVObject():
         grid.plot(cmap=plt.cm.jet, clim=[0, np.max(splitting)], stitle='Qubit splitting [GHz] for |B| = {}T'.format(B_mag))
 
 
-    # This function sweeps through all magnetic field values given by B and
-    # returns the dipole transition rates between the two lowest excited states
-    # and two lowest ground states. E is the emitted photon electric field.
-    # B is an array with shape (3, N_B), where N_B is
-    # the number of magnetic fields to be swept. If plot is True, the
-    # transition rates as well as the spin-nonconserving/spin-conserving transition
-    # ratios will be plotted in function of the magnitude of B (only
-    # makes sense if B is linearly increasing in one direction)
-
     def dipole_transitions(self, B, E=[1,1,1], plot=True):
+        """ This function sweeps through all magnetic field values given by B and
+        returns the dipole transition rates between the two lowest excited states
+        and two lowest ground states. E is the emitted photon electric field.
+        B is an array with shape (3, N_B), where N_B is the number of magnetic 
+        fields to be swept. If plot is True, the transition rates as well as the
+        spin-nonconserving/spin-conserving transition ratios will be plotted in 
+        function of the magnitude of B (only makes sense if B is linearly 
+        increasing in one direction). """
 
         # unperturbed orbital basis states
         egxu = basis(8,0)
@@ -589,15 +595,15 @@ class SiVObject():
         grid.plot(cmap=plt.cm.jet, clim=[0, 1], stitle='$\Gamma$(B$\longrightarrow$1)/$\Gamma$(B$\longrightarrow$2) for |B| = {}T'.format(B_mag))
 
 
-    # this function tries to calculate the strain based on transition frequency
-    # measurements (measured_transitions) in function of different magnetic fields (B_tr)
-    # and branching ratio (between spin-nonconserving and spin-conserving dipole
-    # transitions) measurements (measured_branching_ratios) in function of different
-    # magnetic fields (B_br). The measdured transition frequencies are between the two
-    # lowest excited states and two lowest ground states (assuming we are operating at
-    # temperatures low enough to freeze out the higher states).
-
     def find_strain(self, B_tr, measured_transitions, B_br, measured_branching_ratios):
+        """ This function tries to calculate the strain based on transition frequency
+        measurements (measured_transitions) in function of different magnetic fields (B_tr)
+        and branching ratio (between spin-nonconserving and spin-conserving dipole
+        transitions) measurements (measured_branching_ratios) in function of different
+        magnetic fields (B_br). The measdured transition frequencies are between the two
+        lowest excited states and two lowest ground states (assuming we are operating at
+        temperatures low enough to freeze out the higher states). """
+
         transitions = np.zeros([4, len(B[0,:])])
 
         def optimize_this(x):
@@ -629,3 +635,16 @@ class SiVObject():
         else:
             print("optimization not succesfull: strain not found")
             return [result.x[0], result.x[1], result.x[2], result.x[3]]
+
+    def transition_splitting(self):
+        """ Returns the energy difference between the up-up and down-down 
+            transitions."""
+        
+        bands = np.zeros([2, 4])
+        bands[0, :] = (self.Hg.eigenenergies()).real # Ground state energies
+        bands[1, :] = (self.He.eigenenergies()).real # Excited state energies
+
+        ge_down_down = bands[1, 0] - bands[0, 0] # f_downdown
+        ge_up_up = bands[1, 1] - bands[0, 1] # f_upup
+        
+        return ge_up_up - ge_down_down
