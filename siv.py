@@ -98,8 +98,8 @@ class SiV():
         # Zeeman effect - spin
         HZS = gamma_s*(Bz*(ket2dm(egxu) - ket2dm(egxd) + ket2dm(egyu) - ket2dm(egyd) \
                           + ket2dm(euxu) - ket2dm(euxd) + ket2dm(euyu) - ket2dm(euyd)) \
-                    + (Bx-1j*By)*1j*egxd*egxu.dag() + (Bx+1j*By)*egxu*egxd.dag() + (Bx-1j*By)*1j*egyd*egyu.dag() + (Bx+1j*By)*egyu*egyd.dag() \
-                    + (Bx-1j*By)*1j*euxd*euxu.dag() + (Bx+1j*By)*euxu*euxd.dag() + (Bx-1j*By)*1j*euyd*euyu.dag() + (Bx+1j*By)*euyu*euyd.dag())
+                    + (Bx-1j*By)*egxd*egxu.dag() + (Bx+1j*By)*egxu*egxd.dag() + (Bx-1j*By)*egyd*egyu.dag() + (Bx+1j*By)*egyu*egyd.dag() \
+                    + (Bx-1j*By)*euxd*euxu.dag() + (Bx+1j*By)*euxu*euxd.dag() + (Bx-1j*By)*euyd*euyu.dag() + (Bx+1j*By)*euyu*euyd.dag())    
 
         # Zeeman effect - orbital
         HZL = f*gamma_l*Bz*(1j*egyu*egxu.dag() - 1j*egxu*egyu.dag() + 1j*egyd*egxd.dag() - 1j*egxd*egyd.dag() \
@@ -160,7 +160,7 @@ class SiV():
 
         # Zeeman effect - spin
         HZS = gamma_s*(Bz*(ket2dm(exu) - ket2dm(exd) + ket2dm(eyu) - ket2dm(eyd)) \
-                    + (Bx-1j*By)*1j*exd*exu.dag() + (Bx+1j*By)*exu*exd.dag() + (Bx-1j*By)*1j*eyd*eyu.dag() + (Bx+1j*By)*eyu*eyd.dag())
+                    + (Bx-1j*By)*exd*exu.dag() + (Bx+1j*By)*exu*exd.dag() + (Bx-1j*By)*eyd*eyu.dag() + (Bx+1j*By)*eyu*eyd.dag())   
 
         # Zeeman effect - orbital
         HZL = f*gamma_l*Bz*(1j*eyu*exu.dag() - 1j*exu*eyu.dag() + 1j*eyd*exd.dag() - 1j*exd*eyd.dag())
@@ -536,7 +536,7 @@ class SiV():
                 states = self.Hfull.eigenstates()
                 Pdd = np.abs((2 * np.pi * (np.abs(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4]))**2)[0,0])
                 Pdu = np.abs((2 * np.pi * (np.abs(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4]))**2)[0,0])
-                ratio[ii,jj] = Pdu/Pdd
+                ratio[ii,jj] = 10*np.log(Pdu/Pdd)/np.log(10)
 
 
         # Transform to spherical coordinates
@@ -548,7 +548,7 @@ class SiV():
         grid = pv.StructuredGrid(x, y, z)
         grid.cell_arrays['lsm'] = ratio.ravel(order='F')
 
-        grid.plot(cmap=plt.cm.jet, clim=[0, 1], stitle='$\Gamma$(A$\longrightarrow$2)/$\Gamma$(A$\longrightarrow$1) for |B| = {}T'.format(B_mag))
+        grid.plot(cmap=plt.cm.jet, clim=[-100, 0], stitle='R(A-->2)/R(A$-->1) for |B| = {}T [dB]'.format(B_mag))
 
     def B1B2_branching_ratio_sphere(self, B_mag, E=[1,1,1]):
         Magnitude = B_mag
@@ -580,7 +580,7 @@ class SiV():
                 states = self.Hfull.eigenstates()
                 Puu = np.abs((2 * np.pi * (np.abs(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5]))**2)[0,0])
                 Pud = np.abs((2 * np.pi * (np.abs(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5]))**2)[0,0])
-                ratio[ii,jj] = Pud/Puu
+                ratio[ii,jj] = 10*np.log(Pud/Puu)/np.log(10)
 
 
         # Transform to spherical coordinates
@@ -592,7 +592,7 @@ class SiV():
         grid = pv.StructuredGrid(x, y, z)
         grid.cell_arrays['lsm'] = ratio.ravel(order='F')
 
-        grid.plot(cmap=plt.cm.jet, clim=[0, 1], stitle='$\Gamma$(B$\longrightarrow$1)/$\Gamma$(B$\longrightarrow$2) for |B| = {}T'.format(B_mag))
+        grid.plot(cmap=plt.cm.jet, clim=[-100, 0], stitle='R(B-->1)/R(B-->2) for |B| = {}T [dB]'.format(B_mag))
 
 
     def find_strain(self, B_tr, measured_transitions, B_br, measured_branching_ratios):
@@ -604,12 +604,12 @@ class SiV():
         lowest excited states and two lowest ground states (assuming we are operating at
         temperatures low enough to freeze out the higher states). """
 
-        transitions = np.zeros([4, len(B[0,:])])
+        transitions = np.zeros([4, len(B_tr[0,:])])
 
         def optimize_this(x):
             self.update_val(alpha_g=x[0], beta_g=x[1], alpha_e=x[2], beta_e=x[3])
 
-            transitions = self.sweep_B_field_transitions(B, frozen=True, plot=False)
+            transitions = self.sweep_B_field_transitions(B_tr, frozen=True, plot=False)
             transitions.sort(axis=0)
             tr_error = np.sum(np.sum(np.square(transitions-measured_transitions)))
             #error = np.sum(np.sum(np.abs(transitions-measured_transitions)))
