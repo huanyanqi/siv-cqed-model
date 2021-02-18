@@ -4,8 +4,8 @@
 *$py.class
 
 # Jupyter Notebook
-.ipynb_checkpoints
-.ipynb_checkpoints/
+*/.ipynb_checkpoints
+*/.ipynb_checkpoints/
 
 # IPython
 profile_default/
@@ -14,5 +14,3 @@ ipython_config.py
 # IDE files
 .vscode
 .idea
-
-SiV_Model_Archive/
