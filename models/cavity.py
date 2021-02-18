@@ -1,5 +1,5 @@
 import numpy as np
-from siv import SiV
+from sivqed.models.siv import SiV
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
