@@ -1,7 +1,7 @@
 import numpy as np
 from sivqed.models.siv import SiV
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
 
 class Cavity:
     """ Model of a cavity with an arbitrary qubit placed in the cavity. The cavity
@@ -44,7 +44,8 @@ class Cavity:
     
     def set_cavity_params(self, cavity_params):
         """ Update the instance params with a new set of params from a dictionary. """
-        self.cavity_params.update(cavity_params)
+        if cavity_params is not None:
+            self.cavity_params.update(cavity_params)
 
     @staticmethod
     def reflectance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
@@ -66,8 +67,7 @@ class Cavity:
                
         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
         # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
-        # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))
-        
+        # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))  
         
     @staticmethod
     def transmittance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
@@ -88,8 +88,17 @@ class Cavity:
             return
 
     @staticmethod
+    def reflectance_fn_fit(w, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot):
+        """ Reflectance function used for fitting to the spectrum for one 
+        particular spin (WLOG up). The parameters for down spin are set to 0. """
+
+        return Cavity.reflectance_fn(w, 1, 0, 0, 0, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot)
+
+    @staticmethod
     def spin_contrast_fn(ref_down, ref_up):
-        """ Returns the function that defines the contrast between the reflection spectra of down and up spins.  """
+        """ Returns the function that defines the contrast between the reflection 
+        spectra of down and up spins.  """
+
         return np.abs(np.log(ref_down / ref_up)) * np.maximum(ref_down, ref_up)
         # (1 - r_down/2)  * r_up # TODO Update this contrast function to infidelity
 
@@ -107,11 +116,21 @@ class Cavity:
         """ Transmittance as a function of laser frequency w. """
         return self.transmittance_fn(w, spin_state, **self.cavity_params)
     
-    def fit_reflection(self, freqs, spectrum):
-        """ Fit the reflection spectrum as a function of the laser frequency sweep (freqs). Returns the fitted parameters. """
-        raise NotImplementedError
-       # def lorentzian(x, A, x0, width):
-       #     return A / ((x - x0) ** 2 + width ** 2
+    def fit_reflection(self, freqs, spectrum, p0=None, bounds=(-np.inf, np.inf)):
+        """ Fit the reflection spectrum as a function of the laser frequency sweep (freqs). 
+        Returns the fitted parameters. 
+        
+        p0 : Array
+            Initial guesses for parameters - w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot
+        bounds : 2-tuple
+            Lower and upper bounds on parameters. Each element is either an array 
+            with the length equal to the number of parameters, or a scalar 
+            (in which case the bound is taken to be the same for all parameters).  
+        """
+
+        popt, cov = curve_fit(self.reflectance_fn_fit, freqs, spectrum, p0=p0, bounds=bounds)
+        params = ["w_up", "g_up", "gamma_up", "w_c", "k_in", "k_out", "k_tot"]
+        return dict(zip(params, popt)), cov
 
     def empty_contrast(self, w, w_up):
         """ Function that we want to optimize over to maximize contrast.
