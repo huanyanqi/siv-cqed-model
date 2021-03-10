@@ -1,21 +1,30 @@
+import copy
 import numpy as np
 from sivqed.models.siv import SiV
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize, curve_fit
+from scipy.optimize import minimize
 
-class Cavity:
-    """ Model of a cavity with an arbitrary qubit placed in the cavity. The cavity
-        has its own resonance frequency while the qubit is assumed to have two 
-        resonance frequencies that correspond to its spin state. No model is 
-        assumed for the qubit and its resonance frequencies are fixed. """
+class MultiQubitCavity:
+    """ Model of a cavity with any number of arbitrary qubits placed in the 
+        cavity. The cavity has its own resonance frequency while the qubit is 
+        assumed to have two  resonance frequencies that correspond to its spin 
+        state. No model is  assumed for the qubit and its resonance frequencies 
+        are fixed. 
 
-    # References:
+        References:
     # An integrated nanophotonic quantum register based on silicon-vacancy spins in diamond, Phys. Rev. B 100, 165428 (2019)
     # Cavity-based quantum networks with single atoms and optical photons, Rev. Mod. Phys.  87, 1379 (2015)
+    """
     
-    def __init__(self, cavity_params=None):
+    default_cavity_params = {
+            # Cavity parameters (units: s^-1)
+            "w_c" : 0,    # Cavity resonance frequency
+            "k_in" : 16.5,    # In-coupling mirror rate
+            "k_out" : 0,   # Out-coupling mirror rate
+            "k_tot" : 33,   # Cavity linewidth (k_tot = k_in + k_out + k_other)     
+        }
         
-        default_params = {
+    default_qubit_params = {
             # Qubit parameters (units: s^-1)
             # Spin down
             "w_down" : 15,       # Spin-down transition frequency
@@ -26,73 +35,168 @@ class Cavity:
             "w_up" : 17.5,          # Spin-up transition frequency
             "g_up" : 5.6,         # Single-photon Rabi frequency
             "gamma_up" : 0.1,      # Atom linewidth / spont. emission rate
-
-            # Cavity parameters (units: s^-1)
-            "w_c" : 0,    # Cavity resonance frequency
-            "k_in" : 16.5,    # In-coupling mirror rate
-            "k_out" : 0,   # Out-coupling mirror rate
-            "k_tot" : 33,   # Cavity linewidth (k_tot = k_in + k_out + k_other)     
         }
         
-        # Use the default parameters as a base for inputs that are not provided
-        self.cavity_params = default_params.copy()
-        if cavity_params is not None:
-            self.cavity_params.update(cavity_params) # Update with user-input params
-
-    def __repr__(self):
-        return f"Cavity({str(self.cavity_params)})"
-    
-    def set_cavity_params(self, cavity_params):
-        """ Update the instance params with a new set of params from a dictionary. """
+    def __init__(self, cavity_params=None, qubit_params=None):
+        
+        # Use the default parameters as a base then update with user-input params
+        self.cavity_params = self.default_cavity_params.copy()
         if cavity_params is not None:
             self.cavity_params.update(cavity_params)
 
-    @staticmethod
-    def reflectance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
-        """ Reflectance as a function of laser frequency w. Used for curve fitting. """
+        self.qubit_params = [] 
+
+         # Create a default qubit for each qubit specified, then update with 
+         # provided values
+        if qubit_params is not None:
+            if type(qubit_params) != list:
+                qubit_params = list(qubit_params)
+
+            for params in qubit_params:
+                self.qubit_params.append(self.default_qubit_params.copy())
+                self.qubit_params[-1].update(params)  
+        
+        # If nothing provided, default is a single qubit in a 1-element list
+        else:
+            self.qubit_params = [self.default_qubit_params.copy()] 
+
+    def __repr__(self):
+        return f"MultiQubitCavity({str(self.cavity_params)}, {str(self.qubit_params)})"
+    
+    def set_cavity_params(self, cavity_params):
+        """ Update the instance params with a new set of params from a dictionary. """
+            self.cavity_params.update(cavity_params)
+
+    def set_qubit_params(self, qubit_params):
+        """ Update the instance params with a new set of params from a dictionary. 
+        
+        qubit_params : dict
+            Key: Index of the qubit to be updated
+            Value: Dictionary of qubit parameters to be updated.
+        """
+        for idx, params in qubit_params.items():
+            if idx >= len(self.qubit_params):
+                print(f"Provided qubit index of {idx} exeeded number of qubits in system!")
+                continue
+            self.qubit_params[idx].update(params)
+
+    @classmethod
+    def reflectance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_tot, **kwargs):
+        """ Reflectance as a function of laser frequency w."""
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
+        denom = 1j * (w - w_c) + k_tot 
+
         if spin_state == 0:
-            r_down = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down)))
-            return (r_down * r_down.conjugate()).real
+            for params in qubit_params:
+                denom += params["g_down"] ** 2 / (1j * (w - params["w_down"]) + params["gamma_down"])
         elif spin_state == 1:
-            r_up = 1 - (2 * k_in / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up)))
-            return (r_up * r_up.conjugate()).real
+            for params in qubit_params:
+                denom += params["g_up"] ** 2 / (1j * (w - params["w_up"]) + params["gamma_up"])
         elif spin_state == -1:
-            r_empty = 1 - (2 * k_in / (1j * (w - w_c) + k_tot))
-            return (r_empty * r_empty.conjugate()).real
+            pass
         else:
             print("spin_state should be -1, 0, or 1.")
             return
                
+        r = 1 - (2 * k_in / denom)
+        return (r * r.conjugate()).real
+
         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
         # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
         # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))  
         
-    @staticmethod
-    def transmittance_fn(w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
-        """ Transmittance as a function of laser frequency w. Used for curve fitting. """
+    @classmethod
+    def transmittance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs):
+        """ Transmittance as a function of laser frequency w. """
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
+        denom = 1j * (w - w_c) + k_tot
+
         if spin_state == 0:
-            t_down = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_down ** 2 / (1j * (w - w_down) + gamma_down))
-            return (t_down * t_down.conjugate()).real
+            for params in qubit_params:
+                denom += params["g_down"] ** 2 / (1j * (w - params["w_down"]) + params["gamma_down"])
         elif spin_state == 1:
-            t_up = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot + g_up ** 2 / (1j * (w - w_up) + gamma_up))
-            return (t_up * t_up.conjugate()).real
+            for params in qubit_params:
+                denom += params["g_up"] ** 2 / (1j * (w - params["w_up"]) + params["gamma_up"])
         elif spin_state == -1:
-            t_empty = 2 * np.sqrt(k_in * k_out) / (1j * (w - w_c) + k_tot)
-            return (t_empty * t_empty.conjugate()).real
+            pass
         else:
             print("spin_state should be -1, 0, or 1.")
             return
 
-    @staticmethod
-    def reflectance_fn_fit(w, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot):
-        """ Reflectance function used for fitting to the spectrum for one 
-        particular spin (WLOG up). The parameters for down spin are set to 0. """
+        t = 2 * np.sqrt(k_in * k_out) / denom
+        return (t * t.conjugate()).real
 
-        return Cavity.reflectance_fn(w, 1, 0, 0, 0, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot)
+    def reflectance(self, w, spin_state):
+        """ Reflectance as a function of laser frequency w. """
+        return self.reflectance_fn(w, spin_state, self.qubit_params, **self.cavity_params)
+    
+    def transmittance(self, w, spin_state):
+        """ Transmittance as a function of laser frequency w. """
+        return self.transmittance_fn(w, spin_state, self.qubit_params, **self.cavity_params)
+        
+
+class Cavity(MultiQubitCavity):
+    """ Model of a cavity with an arbitrary qubit placed in the cavity. The cavity
+        has its own resonance frequency while the qubit is assumed to have two 
+        resonance frequencies that correspond to its spin state. No model is 
+        assumed for the qubit and its resonance frequencies are fixed.
+
+        References:
+        # An integrated nanophotonic quantum register based on silicon-vacancy spins in diamond, Phys. Rev. B 100, 165428 (2019)
+        # Cavity-based quantum networks with single atoms and optical photons, Rev. Mod. Phys.  87, 1379 (2015)
+    """
+    
+    ### Initialization ###
+
+    def __init__(self, cavity_params=None, qubit_params=None):
+        
+        # Use the default parameters as a base then update with user-input params
+        self.cavity_params = self.default_cavity_params.copy()
+        if cavity_params is not None:
+            self.cavity_params.update(cavity_params)
+
+        self.qubit_params = self.default_qubit_params.copy()
+        if qubit_params is not None:
+            self.qubit_params.update(qubit_params)  
+
+    def __repr__(self):
+        return f"Cavity({str(self.cavity_params)}, {str(self.qubit_params)})"
+
+    def set_qubit_params(self, qubit_params):
+        """ Update the instance params with a new set of params from a dictionary. """
+        self.qubit_params.update(qubit_params)
+
+    ### Reflectance and Transmittance ###
+
+    @classmethod
+    def reflectance_fn(cls, w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_tot, **kwargs):
+        """ Reflectance as a function of laser frequency w for a single qubit."""
+        # From Rev. Mod. Phys.  87, 1379 (2015)
+        return super().reflectance_fn(w, spin_state,
+                [{"w_down" : w_down, "g_down" : g_down, "gamma_down" : gamma_down,   
+                  "w_up" : w_up, "g_up" : g_up, "gamma_up" : gamma_up}],
+                w_c, k_in, k_tot)
+
+    @classmethod
+    def transmittance_fn(cls, w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
+        """ Transmittance as a function of laser frequency w for a single qubit. """
+        # From Rev. Mod. Phys.  87, 1379 (2015)
+        return super().transmittance_fn(w, spin_state,
+                [{"w_down" : w_down, "g_down" : g_down, "gamma_down" : gamma_down,   
+                  "w_up" : w_up, "g_up" : g_up, "gamma_up" : gamma_up}],
+                w_c, k_in, k_out, k_tot)
+
+    def reflectance(self, w, spin_state):
+        """ Reflectance as a function of laser frequency w. """
+        return self.reflectance_fn(w, spin_state, **self.cavity_params, **self.qubit_params)
+    
+    def transmittance(self, w, spin_state):
+        """ Transmittance as a function of laser frequency w. """
+        return self.transmittance_fn(w, spin_state, **self.cavity_params, **self.qubit_params)
+
+    ### Spin Contrast - not defined for multi-qubit ###
 
     @staticmethod
     def spin_contrast_fn(ref_down, ref_up):
@@ -108,30 +212,6 @@ class Cavity:
         spectra with an up spin and with an empty cavity.  """
         return np.abs(np.log(ref_empty / ref_up))
         
-    def reflectance(self, w, spin_state):
-        """ Reflectance as a function of laser frequency w. """
-        return self.reflectance_fn(w, spin_state, **self.cavity_params)
-    
-    def transmittance(self, w, spin_state):
-        """ Transmittance as a function of laser frequency w. """
-        return self.transmittance_fn(w, spin_state, **self.cavity_params)
-    
-    def fit_reflection(self, freqs, spectrum, p0=None, bounds=(-np.inf, np.inf)):
-        """ Fit the reflection spectrum as a function of the laser frequency sweep (freqs). 
-        Returns the fitted parameters. 
-        
-        p0 : Array
-            Initial guesses for parameters - w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot
-        bounds : 2-tuple
-            Lower and upper bounds on parameters. Each element is either an array 
-            with the length equal to the number of parameters, or a scalar 
-            (in which case the bound is taken to be the same for all parameters).  
-        """
-
-        popt, cov = curve_fit(self.reflectance_fn_fit, freqs, spectrum, p0=p0, bounds=bounds)
-        params = ["w_up", "g_up", "gamma_up", "w_c", "k_in", "k_out", "k_tot"]
-        return dict(zip(params, popt)), cov
-
     def empty_contrast(self, w, w_up):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
@@ -186,53 +266,35 @@ class CavitySiV(Cavity):
     cavity experiences. The SiV properties can change based on parameters such as
     the applied B field and strain. """
 
-    def __init__(self, cavity_params=None, siv=None):
+    def __init__(self, cavity_params=None, qubit_params=None, siv=None):
         
-        # This differs from the generic Cavity with the removal of the 
-        # w_up and w_down param here; it will be set by the SiV object later.
-        default_cavity_params = {
-            # Qubit parameters (units: s^-1)
-            # Spin down
-            "g_down" : 5.6,       # Single-photon Rabi frequency
-            "gamma_down" : 0.1,   # Transition linewidth / spont. emission rate
-
-            # Spin up
-            "g_up" : 5.6,         # Single-photon Rabi frequency
-            "gamma_up" : 0.1,     # Atom linewidth / spont. emission rate
-
-            # Cavity parameters (units: s^-1)
-            "w_c" : 0,      # Cavity resonance frequency
-            "k_in" : 16.5,  # In-coupling mirror rate
-            "k_out" : 0,    # Out-coupling mirror rate
-            "k_tot" : 33    # Cavity linewidth (k_tot = k_in + k_out + k_other)     
-        }
+        super().__init__(cavity_params, qubit_params)
         
-        # Use the default parameters as a base for inputs that are not provided
-        self.cavity_params = default_cavity_params.copy()
-        if cavity_params is not None:
-            self.cavity_params.update(cavity_params) # Update with user-input params
+        # Remove the qubit transitions as those will be handled by the SiV object
+        del self.qubit_params["w_up"]
+        del self.qubit_params["w_down"]
         
         # Use the default SiV constructor if None is provided
         if siv is None:
             siv = SiV()
-        self.siv = siv
+        self.siv = copy.deepcopy(siv)
 
         # Set transition frequency from SiV object
-        self.cavity_params["w_down"] = 0
-        self.cavity_params["w_up"] = self.siv.transition_splitting()
+        self.qubit_params["w_down"] = 0
+        self.qubit_params["w_up"] = self.siv.transition_splitting()
 
     def __repr__(self):
-        return f"CavitySiV({str(self.cavity_params)}, {str(self.siv)})"
+        return f"CavitySiV({str(self.cavity_params)}, {str(self.qubit_params)}, {str(self.siv)})"
     
     def update_siv_params(self, **siv_params):
         """ Update the SiV params with a new set of params as keyword args. """
         self.siv.update_val(**siv_params)
-        self.cavity_params["w_up"] = self.siv.transition_splitting()
+        self.qubit_params["w_up"] = self.siv.transition_splitting()
 
     def replace_siv(self, siv):
         """ Update the SiV params with a new set of params as keyword args. """
-        self.siv = siv
-        self.cavity_params["w_up"] = self.siv.transition_splitting()
+        self.siv = copy.deepcopy(siv)
+        self.qubit_params["w_up"] = self.siv.transition_splitting()
 
     # TODO: Make a copy of the cavity + SiV so that we don't need to modify
     # the current parameters? 
