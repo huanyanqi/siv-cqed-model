@@ -12,10 +12,10 @@ class MultiQubitCavity:
         are fixed. 
 
         References:
-    # An integrated nanophotonic quantum register based on silicon-vacancy spins in diamond, Phys. Rev. B 100, 165428 (2019)
-    # Cavity-based quantum networks with single atoms and optical photons, Rev. Mod. Phys.  87, 1379 (2015)
+        # An integrated nanophotonic quantum register based on silicon-vacancy spins in diamond, Phys. Rev. B 100, 165428 (2019)
+        # Cavity-based quantum networks with single atoms and optical photons, Rev. Mod. Phys.  87, 1379 (2015)
     """
-    
+
     default_cavity_params = {
             # Cavity parameters (units: s^-1)
             "w_c" : 0,    # Cavity resonance frequency
@@ -23,27 +23,27 @@ class MultiQubitCavity:
             "k_out" : 0,   # Out-coupling mirror rate
             "k_tot" : 33,   # Cavity linewidth (k_tot = k_in + k_out + k_other)     
         }
-        
-    default_qubit_params = {
-            # Qubit parameters (units: s^-1)
-            # Spin down
-            "w_down" : 15,       # Spin-down transition frequency
-            "g_down" : 5.6,       # Single-photon Rabi frequency
-            "gamma_down" : 0.1,   # Transition linewidth / spont. emission rate
 
-            # Spin up
-            "w_up" : 17.5,          # Spin-up transition frequency
-            "g_up" : 5.6,         # Single-photon Rabi frequency
-            "gamma_up" : 0.1,      # Atom linewidth / spont. emission rate
-        }
-        
+    default_qubit_params = {
+        # Qubit parameters (units: s^-1)
+        # Spin down
+        "w_down" : 15,       # Spin-down transition frequency
+        "g_down" : 5.6,       # Single-photon Rabi frequency
+        "gamma_down" : 0.1,   # Transition linewidth / spont. emission rate
+
+        # Spin up
+        "w_up" : 17.5,          # Spin-up transition frequency
+        "g_up" : 5.6,         # Single-photon Rabi frequency
+        "gamma_up" : 0.1,      # Atom linewidth / spont. emission rate
+    }
+    
     def __init__(self, cavity_params=None, qubit_params=None):
         
         # Use the default parameters as a base then update with user-input params
         self.cavity_params = self.default_cavity_params.copy()
         if cavity_params is not None:
             self.cavity_params.update(cavity_params)
-
+            
         self.qubit_params = [] 
 
          # Create a default qubit for each qubit specified, then update with 
@@ -62,10 +62,10 @@ class MultiQubitCavity:
 
     def __repr__(self):
         return f"MultiQubitCavity({str(self.cavity_params)}, {str(self.qubit_params)})"
-    
+
     def set_cavity_params(self, cavity_params):
         """ Update the instance params with a new set of params from a dictionary. """
-            self.cavity_params.update(cavity_params)
+        self.cavity_params.update(cavity_params)
 
     def set_qubit_params(self, qubit_params):
         """ Update the instance params with a new set of params from a dictionary. 
@@ -98,14 +98,14 @@ class MultiQubitCavity:
         else:
             print("spin_state should be -1, 0, or 1.")
             return
-               
+        
         r = 1 - (2 * k_in / denom)
         return (r * r.conjugate()).real
 
-        # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
+         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
         # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
         # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))  
-        
+
     @classmethod
     def transmittance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs):
         """ Transmittance as a function of laser frequency w. """
@@ -160,10 +160,10 @@ class Cavity(MultiQubitCavity):
         self.qubit_params = self.default_qubit_params.copy()
         if qubit_params is not None:
             self.qubit_params.update(qubit_params)  
-
+    
     def __repr__(self):
         return f"Cavity({str(self.cavity_params)}, {str(self.qubit_params)})"
-
+    
     def set_qubit_params(self, qubit_params):
         """ Update the instance params with a new set of params from a dictionary. """
         self.qubit_params.update(qubit_params)
@@ -211,13 +211,16 @@ class Cavity(MultiQubitCavity):
         """ Returns the function that defines the contrast between the reflection 
         spectra with an up spin and with an empty cavity.  """
         return np.abs(np.log(ref_empty / ref_up))
-        
+
     def empty_contrast(self, w, w_up):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
-    
-        self.set_cavity_params({"w_c": 0, "w_up": w_up}) 
-        return self.empty_contrast_fn(self.reflectance(w, -1), self.reflectance(w, 1)) 
+
+        c = copy.deepcopy(self)
+        c.set_cavity_params({"w_c": 0})
+        c.set_qubit_params({"w_up": w_up}) 
+
+        return c.empty_contrast_fn(c.reflectance(w, -1), c.reflectance(w, 1)) 
 
     def optimize_empty_contrast(self, w_0, w_up_0, w_bounds, w_up_bounds):
         opt = minimize(lambda args: -self.empty_contrast(*args), x0=[w_0, w_up_0], bounds=(w_bounds, w_up_bounds))
@@ -231,11 +234,13 @@ class Cavity(MultiQubitCavity):
     def plot_reflection_contrast_empty(self, w_arr, w_up):
 
         # Set the detuning and computed splitting 
-        self.set_cavity_params({"w_c": 0, "w_up": w_up}) 
+        c = copy.deepcopy(self)
+        c.set_cavity_params({"w_c": 0})
+        c.set_qubit_params({"w_up": w_up}) 
         
-        ref_empty = self.reflectance(w_arr, -1)
-        ref_up = self.reflectance(w_arr, 1)
-        contrast = self.empty_contrast_fn(ref_empty, ref_up)
+        ref_empty = c.reflectance(w_arr, -1)
+        ref_up = c.reflectance(w_arr, 1)
+        contrast = c.empty_contrast_fn(ref_empty, ref_up)
         max_contrast_pos = w_arr[np.argmax(contrast)]
         
         # PLot reflection spectrum
@@ -267,13 +272,13 @@ class CavitySiV(Cavity):
     the applied B field and strain. """
 
     def __init__(self, cavity_params=None, qubit_params=None, siv=None):
-        
+
         super().__init__(cavity_params, qubit_params)
-        
+
         # Remove the qubit transitions as those will be handled by the SiV object
         del self.qubit_params["w_up"]
         del self.qubit_params["w_down"]
-        
+
         # Use the default SiV constructor if None is provided
         if siv is None:
             siv = SiV()
@@ -302,16 +307,18 @@ class CavitySiV(Cavity):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
         
+        c = copy.deepcopy(self)
         B = B * np.array(B_axis)
 
         # Compute splitting at given field
-        self.update_siv_params(B=B)
-        splitting = self.siv.transition_splitting() 
-        
-        # Set the detuning and computed splitting
-        self.set_cavity_params({"w_c": delta, "w_down": 0, "w_up": splitting}) 
+        c.update_siv_params(B=B)
+        splitting = c.siv.transition_splitting() 
 
-        return self.spin_contrast_fn(self.reflectance(w, 0), self.reflectance(w, 1)) 
+        # Set the detuning and computed splitting
+        c.set_cavity_params({"w_c": delta})
+        c.set_qubit_params({"w_down": 0, "w_up": splitting}) 
+
+        return c.spin_contrast_fn(c.reflectance(w, 0), c.reflectance(w, 1)) 
 
     def optimize_spin_contrast(self, w_0, B_0, delta_0, w_bounds, B_bounds, delta_bounds, B_axis):
         opt = minimize(lambda args: -self.spin_contrast(args[0], args[1], args[2], B_axis), 
@@ -328,15 +335,17 @@ class CavitySiV(Cavity):
     def plot_reflection_contrast(self, w_arr, B, delta):
 
         # Compute splitting at given field
-        self.update_siv_params(B=B)
-        splitting = self.siv.transition_splitting()
+        c = copy.deepcopy(self)
+        c.update_siv_params(B=B)
+        splitting = c.siv.transition_splitting()
 
         # Set the detuning and computed splitting 
-        self.set_cavity_params({"w_c": delta, "w_down": 0, "w_up": splitting}) 
+        c.set_cavity_params({"w_c": delta})
+        c.set_qubit_params({"w_down": 0, "w_up": splitting}) 
         
-        ref_down = self.reflectance(w_arr, 0)
-        ref_up = self.reflectance(w_arr, 1)
-        contrast = self.spin_contrast_fn(ref_down, ref_up)
+        ref_down = c.reflectance(w_arr, 0)
+        ref_up = c.reflectance(w_arr, 1)
+        contrast = c.spin_contrast_fn(ref_down, ref_up)
         max_contrast_pos = w_arr[np.argmax(contrast)]
         
         # PLot reflection spectrum
