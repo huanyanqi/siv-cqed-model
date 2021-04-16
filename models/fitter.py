@@ -46,7 +46,7 @@ def three_siv_ref(params, w, spectrum):
          {"w_up": params["w_up_3"], "g_up": params["g_up_3"], "gamma_up": params["gamma_up_3"]}], 
         params["w_c"], params["k_in"], params["k_tot"]) + params["B"] - spectrum
 
-def fit_reflection(params, freqs, spectrum, fit_func):
+def fit_reflection(params, freqs, spectrum, fit_func, method='leastsq'):
     """ Fit the reflection spectrum as a function of the laser frequency sweep (freqs). 
     Returns the fitted parameters. 
 
@@ -60,7 +60,7 @@ def fit_reflection(params, freqs, spectrum, fit_func):
         Function to be used for fitting
     """
 
-    result = lmfit.minimize(fit_func, params, args=(freqs, spectrum))
+    result = lmfit.minimize(fit_func, params, args=(freqs, spectrum), method=method)
     return result
 
 
