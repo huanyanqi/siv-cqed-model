@@ -15,4 +15,8 @@ ipython_config.py
 .vscode
 .idea
 
+# Shortucts
+*.lnk
+
+# Date Folder
 /data/*
