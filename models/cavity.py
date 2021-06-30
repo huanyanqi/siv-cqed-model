@@ -202,9 +202,9 @@ class Cavity(MultiQubitCavity):
     def spin_contrast_fn(ref_down, ref_up):
         """ Returns the function that defines the contrast between the reflection 
         spectra of down and up spins.  """
-
+        
         return np.abs(np.log(ref_down / ref_up)) * np.maximum(ref_down, ref_up)
-        # (1 - r_down/2)  * r_up # TODO Update this contrast function to infidelity
+        # (1 - r_down/2)  * r_up # TODO Update this contrast function to infidelity?
 
     @staticmethod
     def empty_contrast_fn(ref_empty, ref_up):
@@ -230,6 +230,71 @@ class Cavity(MultiQubitCavity):
         empty_contrast_opt = -opt.fun # Negative since we used minimize()
 
         return ((w_opt, w_up_opt), empty_contrast_opt)
+    
+    def spin_contrast_no_SiVModel(self, w, delta, splitting):
+        """ Function that we want to optimize over to maximize contrast.
+            Does not assume an SiV model and thus we provide the qubit splitting instead of B field.
+            Will be fed into the optimization routine to find the optimal delta. """
+        
+        c = copy.deepcopy(self)
+
+        # Set the input detuning and splitting
+        c.set_cavity_params({"w_c": delta})
+        c.set_qubit_params({"w_down": 0, "w_up": splitting}) 
+
+        return c.spin_contrast_fn(c.reflectance(w, 0), c.reflectance(w, 1)) 
+    
+    def optimize_spin_contrast_no_SiVmodel(self, w_0, delta_0, splitting_0, 
+                                                 w_bounds, delta_bounds, splitting_bounds):
+        """ Optimize the contrast between the two spin states of the qubit but without
+        assuming any SiV model, and thus B field does not come into play. Instead we 
+        impose a maximum splitting allowed for the two states. """        
+
+        opt = minimize(lambda args: -self.spin_contrast_no_SiVModel(args[0], args[1], args[2]), 
+                        x0=[w_0, delta_0, splitting_0], bounds=(w_bounds, delta_bounds, splitting_bounds))
+
+        # Extract optimal params and optimal value
+        w_opt, delta_opt, splitting_opt = opt.x
+        spin_contrast_opt = -opt.fun # Negative since we used minimize()
+
+        return ((w_opt, delta_opt, splitting_opt), spin_contrast_opt)
+    
+    def plot_reflection_contrast_no_SiVmodel(self, w_arr, delta, splitting):
+
+        c = copy.deepcopy(self)
+        
+        # Set the detuning and computed splitting 
+        c.set_cavity_params({"w_c": delta})
+        c.set_qubit_params({"w_down": 0, "w_up": splitting}) 
+        
+        ref_down = c.reflectance(w_arr, 0)
+        ref_up = c.reflectance(w_arr, 1)
+        contrast = c.spin_contrast_fn(ref_down, ref_up)
+        max_contrast_pos = w_arr[np.argmax(contrast)]
+        
+        # PLot reflection spectrum
+        plt.figure(figsize=[16, 6])
+        plt.subplot(1, 2, 1)
+        plt.title("Reflection spectrum")
+        plt.plot(w_arr, ref_down, label="down")
+        plt.plot(w_arr, ref_up, label="up")
+        plt.plot([max_contrast_pos, max_contrast_pos], [-0.05, 1], 'r--')
+        plt.ylim([0, 1])
+        plt.xlabel("Frequency")
+        plt.ylabel("Reflectance")
+        plt.legend()
+
+        # Plot reflection contrast 
+        plt.subplot(1, 2, 2)
+        plt.title("Reflection contrast spectrum")
+        plt.plot(w_arr, contrast)
+        plt.plot([max_contrast_pos, max_contrast_pos] , [min(contrast), max(contrast)], 'r--')
+        plt.xlabel("Frequency")
+        plt.ylabel("Reflection Contrast")
+        
+        print(f"Maximum contrast = {max(contrast):.3} located at frequency {max_contrast_pos:.3}")
+        print(f"Lower reflectivity = {ref_up[np.argmax(contrast)]:.3}, higher reflectivity = {ref_down[np.argmax(contrast)]:.3}")
+
 
     def plot_reflection_contrast_empty(self, w_arr, w_up):
 
@@ -301,8 +366,6 @@ class CavitySiV(Cavity):
         self.siv = copy.deepcopy(siv)
         self.qubit_params["w_up"] = self.siv.transition_splitting()
 
-    # TODO: Make a copy of the cavity + SiV so that we don't need to modify
-    # the current parameters? 
     def spin_contrast(self, w, B, delta, B_axis):
         """ Function that we want to optimize over to maximize contrast.
             Will be fed into the optimization routine to find the optimal B and delta. """
@@ -330,8 +393,6 @@ class CavitySiV(Cavity):
 
         return ((w_opt, B_opt, delta_opt), spin_contrast_opt)
 
-    # TODO: Make a copy of the cavity + SiV so that we don't need to modify
-    # the current parameters? 
     def plot_reflection_contrast(self, w_arr, B, delta):
 
         # Compute splitting at given field
