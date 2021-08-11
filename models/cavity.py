@@ -102,7 +102,7 @@ class MultiQubitCavity:
         r = 1 - (2 * k_in / denom)
         return (r * r.conjugate()).real
 
-         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
+        # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
         # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
         # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))  
 
@@ -200,15 +200,23 @@ class Cavity(MultiQubitCavity):
 
     @staticmethod
     def spin_contrast_fn(ref_down, ref_up):
-        """ Returns the function that defines the contrast between the reflection 
-        spectra of down and up spins.  """
+        """ Function that defines the contrast between the reflection
+        spectra of down and up spins that is used during optimization.  """
         
         return np.abs(np.log(ref_down / ref_up)) * np.maximum(ref_down, ref_up)
         # (1 - r_down/2)  * r_up # TODO Update this contrast function to infidelity?
 
     @staticmethod
+    def spin_true_contrast_fn(ref_down, ref_up):
+        """ Returns the actual contrast between the reflection
+        spectra of down and up spins. Not used for optimization since it does
+        not fully represent all our optimization goals.  """
+
+        return np.maximum(ref_down, ref_up) / np.minimum(ref_down, ref_up)
+
+    @staticmethod
     def empty_contrast_fn(ref_empty, ref_up):
-        """ Returns the function that defines the contrast between the reflection 
+        """ Function that defines the contrast between the reflection
         spectra with an up spin and with an empty cavity.  """
         return np.abs(np.log(ref_empty / ref_up))
 
@@ -259,7 +267,7 @@ class Cavity(MultiQubitCavity):
 
         return ((w_opt, delta_opt, splitting_opt), spin_contrast_opt)
     
-    def plot_reflection_contrast_no_SiVmodel(self, w_arr, delta, splitting):
+    def plot_reflection_contrast_no_SiVmodel(self, w_arr, delta, splitting, print_output=True):
 
         c = copy.deepcopy(self)
         
@@ -269,32 +277,44 @@ class Cavity(MultiQubitCavity):
         
         ref_down = c.reflectance(w_arr, 0)
         ref_up = c.reflectance(w_arr, 1)
-        contrast = c.spin_contrast_fn(ref_down, ref_up)
+        opt_value_fn = c.spin_contrast_fn(ref_down, ref_up)
+        max_optval_pos = w_arr[np.argmax(opt_value_fn)]
+        contrast = c.spin_true_contrast_fn(ref_down, ref_up)
         max_contrast_pos = w_arr[np.argmax(contrast)]
         
         # PLot reflection spectrum
-        plt.figure(figsize=[16, 6])
-        plt.subplot(1, 2, 1)
+        plt.figure(figsize=[22, 6])
+        plt.subplot(1, 3, 1)
         plt.title("Reflection spectrum")
         plt.plot(w_arr, ref_down, label="down")
         plt.plot(w_arr, ref_up, label="up")
+        plt.plot([max_optval_pos, max_optval_pos], [-0.05, 1], 'r--')
         plt.plot([max_contrast_pos, max_contrast_pos], [-0.05, 1], 'r--')
         plt.ylim([0, 1])
         plt.xlabel("Frequency")
         plt.ylabel("Reflectance")
         plt.legend()
 
-        # Plot reflection contrast 
-        plt.subplot(1, 2, 2)
+        # Plot optimization value function
+        plt.subplot(1, 3, 2)
+        plt.title("Optimization value function")
+        plt.plot(w_arr, opt_value_fn)
+        plt.plot([max_optval_pos, max_optval_pos] , [min(opt_value_fn), max(opt_value_fn)], 'r--')
+        plt.xlabel("Frequency")
+        plt.ylabel("Reflection Contrast")
+
+        # Plot reflection contrast
+        plt.subplot(1, 3, 3)
         plt.title("Reflection contrast spectrum")
         plt.plot(w_arr, contrast)
         plt.plot([max_contrast_pos, max_contrast_pos] , [min(contrast), max(contrast)], 'r--')
         plt.xlabel("Frequency")
         plt.ylabel("Reflection Contrast")
-        
-        print(f"Maximum contrast = {max(contrast):.3} located at frequency {max_contrast_pos:.3}")
-        print(f"Lower reflectivity = {ref_up[np.argmax(contrast)]:.3}, higher reflectivity = {ref_down[np.argmax(contrast)]:.3}")
 
+        if print_output:
+            print(f"Maximum optimization value = {max(opt_value_fn):.3} located at frequency {max_optval_pos:.3}")
+            print(f"Maximum contrast = {max(contrast):.3} located at frequency {max_contrast_pos:.3}")
+            print(f"Lower reflectivity = {ref_up[np.argmax(contrast)]:.3}, higher reflectivity = {ref_down[np.argmax(contrast)]:.3}")
 
     def plot_reflection_contrast_empty(self, w_arr, w_up):
 
