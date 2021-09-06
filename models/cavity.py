@@ -81,8 +81,10 @@ class MultiQubitCavity:
             self.qubit_params[idx].update(params)
 
     @classmethod
-    def reflectance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_tot, **kwargs):
-        """ Reflectance as a function of laser frequency w."""
+    def complex_reflect_coeff_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_tot, **kwargs):
+        """ Complex reflection coefficient as a function of laser frequency w.
+            Reflectance (power) is the mod square of this coefficient. """
+
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
         denom = 1j * (w - w_c) + k_tot 
@@ -100,15 +102,26 @@ class MultiQubitCavity:
             return
         
         r = 1 - (2 * k_in / denom)
-        return (r * r.conjugate()).real
+        return r
+
+    @classmethod
+    def reflectance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_tot, **kwargs):
+        """ Reflectance as a function of laser frequency w. Taken to be |r(w)|^2 where 
+            r is the complex reflection coefficient. """
+        # From Rev. Mod. Phys.  87, 1379 (2015)
 
         # From Christian PRL Fig 2 fitting notebook. Differ by some factors of 2 from the above convention.
         # r_up = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_up ** 2 / (1j * (w - w_up) + (gamma_up/2))))
         # r_down = 1 - (k_in / (1j * (w - w_c) + (k_tot/2) + g_down ** 2 / (1j * (w - w_down) + (gamma_down/2))))  
+        
+        r = cls.complex_reflect_coeff_fn(w, spin_state, qubit_params, w_c, k_in, k_tot, **kwargs)
+        return (r * r.conjugate()).real
 
     @classmethod
-    def transmittance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs):
-        """ Transmittance as a function of laser frequency w. """
+    def complex_transmit_coeff_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs):
+        """ Complex transmission coefficient as a function of laser frequency w.
+            Transmittance (power) is the mod square of this coefficient. """
+
         # From Rev. Mod. Phys.  87, 1379 (2015)
 
         denom = 1j * (w - w_c) + k_tot
@@ -126,15 +139,32 @@ class MultiQubitCavity:
             return
 
         t = 2 * np.sqrt(k_in * k_out) / denom
+        return t
+
+    @classmethod
+    def transmittance_fn(cls, w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs):
+        """ Transmittance as a function of laser frequency w. Taken to be |t(w)|^2 where 
+            t is the complex transmission coefficient. """
+        # From Rev. Mod. Phys.  87, 1379 (2015)
+
+        t = cls.complex_transmit_coeff_fn(w, spin_state, qubit_params, w_c, k_in, k_out, k_tot, **kwargs)
         return (t * t.conjugate()).real
 
     def reflectance(self, w, spin_state):
         """ Reflectance as a function of laser frequency w. """
         return self.reflectance_fn(w, spin_state, self.qubit_params, **self.cavity_params)
+
+    def reflected_phase(self, w, spin_state):
+        """ Reflected phase as a function of laser frequency w. """
+        return np.angle(self.complex_reflect_coeff_fn(w, spin_state, self.qubit_params, **self.cavity_params))
     
     def transmittance(self, w, spin_state):
         """ Transmittance as a function of laser frequency w. """
         return self.transmittance_fn(w, spin_state, self.qubit_params, **self.cavity_params)
+
+    def trasnmitted_phase(self, w, spin_state):
+        """ Transmitted phase as a function of laser frequency w. """
+        return np.angle(self.complex_transmit_coeff_fn(w, spin_state, self.qubit_params, **self.cavity_params))
         
 
 class Cavity(MultiQubitCavity):
@@ -169,32 +199,22 @@ class Cavity(MultiQubitCavity):
         self.qubit_params.update(qubit_params)
 
     ### Reflectance and Transmittance ###
-
-    @classmethod
-    def reflectance_fn(cls, w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_tot, **kwargs):
-        """ Reflectance as a function of laser frequency w for a single qubit."""
-        # From Rev. Mod. Phys.  87, 1379 (2015)
-        return super().reflectance_fn(w, spin_state,
-                [{"w_down" : w_down, "g_down" : g_down, "gamma_down" : gamma_down,   
-                  "w_up" : w_up, "g_up" : g_up, "gamma_up" : gamma_up}],
-                w_c, k_in, k_tot)
-
-    @classmethod
-    def transmittance_fn(cls, w, spin_state, w_down, g_down, gamma_down, w_up, g_up, gamma_up, w_c, k_in, k_out, k_tot, **kwargs):
-        """ Transmittance as a function of laser frequency w for a single qubit. """
-        # From Rev. Mod. Phys.  87, 1379 (2015)
-        return super().transmittance_fn(w, spin_state,
-                [{"w_down" : w_down, "g_down" : g_down, "gamma_down" : gamma_down,   
-                  "w_up" : w_up, "g_up" : g_up, "gamma_up" : gamma_up}],
-                w_c, k_in, k_out, k_tot)
-
+    
     def reflectance(self, w, spin_state):
         """ Reflectance as a function of laser frequency w. """
-        return self.reflectance_fn(w, spin_state, **self.cavity_params, **self.qubit_params)
+        return self.reflectance_fn(w, spin_state, [self.qubit_params], **self.cavity_params)
+
+    def reflected_phase(self, w, spin_state):
+        """ Reflected phase as a function of laser frequency w. """
+        return np.angle(self.complex_reflect_coeff_fn(w, spin_state, [self.qubit_params], **self.cavity_params))
     
     def transmittance(self, w, spin_state):
         """ Transmittance as a function of laser frequency w. """
-        return self.transmittance_fn(w, spin_state, **self.cavity_params, **self.qubit_params)
+        return self.transmittance_fn(w, spin_state, [self.qubit_params], **self.cavity_params)
+
+    def trasnmitted_phase(self, w, spin_state):
+        """ Transmitted phase as a function of laser frequency w. """
+        return np.angle(self.complex_transmit_coeff_fn(w, spin_state, [self.qubit_params], **self.cavity_params))
 
     ### Spin Contrast - not defined for multi-qubit ###
 
