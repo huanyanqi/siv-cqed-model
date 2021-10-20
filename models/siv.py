@@ -446,10 +446,10 @@ class SiV():
         for ii in range(len(B[0,:])):
             self.update_val(B=B[:,ii])
             states = self.Hfull.eigenstates()
-            Pdd[ii] = np.abs((2 * np.pi * (np.abs(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4]))**2)[0,0])
-            Puu[ii] = np.abs((2 * np.pi * (np.abs(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5]))**2)[0,0])
-            Pud[ii] = np.abs((2 * np.pi * (np.abs(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5]))**2)[0,0])
-            Pdu[ii] = np.abs((2 * np.pi * (np.abs(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4]))**2)[0,0])
+            Pdd[ii] = np.abs((2 * np.pi * (np.abs(np.array(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4])))**2)[0,0])
+            Puu[ii] = np.abs((2 * np.pi * (np.abs(np.array(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5])))**2)[0,0])
+            Pud[ii] = np.abs((2 * np.pi * (np.abs(np.array(states[1][0].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][5])))**2)[0,0])
+            Pdu[ii] = np.abs((2 * np.pi * (np.abs(np.array(states[1][1].dag()*(E[0]*px + E[1]*py + E[2]*pz)*states[1][4])))**2)[0,0])
 
             B_mag[ii] = np.sqrt(B[0,ii]**2 + B[1,ii]**2 + B[2,ii]**2)
 
